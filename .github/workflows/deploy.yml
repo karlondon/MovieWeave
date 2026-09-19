@@ -47,9 +47,6 @@ jobs:
       - name: Run linting & tests
         run: |
           echo "Running code quality checks..."
-          # Add your linting and test commands here
-          # pip install -r backend/requirements.txt
-          # python -m pytest tests/
 
       - name: Build and push Docker image
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -78,12 +75,14 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > ~/.ssh/movieweave.pem
           chmod 600 ~/.ssh/movieweave.pem
-          ssh-keyscan -H ${{ secrets.LIGHTSAIL_INSTANCE_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.LIGHTSAIL_INSTANCE_IP }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Setup and Deploy to Lightsail
         run: |
-          ssh -i ~/.ssh/movieweave.pem ubuntu@${{ secrets.LIGHTSAIL_INSTANCE_IP }} << 'EOF'
+          ssh -i ~/.ssh/movieweave.pem ubuntu@${{ secrets.LIGHTSAIL_INSTANCE_IP }} << 'SSHEOF'
           set -e
+          
+          echo "📦 Setting up MovieWeave deployment..."
           
           # Create application directory
           sudo mkdir -p /opt/movieweave
@@ -91,81 +90,78 @@ jobs:
           
           # Clone or pull repository
           if [ -d /opt/movieweave/.git ]; then
-            echo "📦 Updating existing repository..."
+            echo "Updating existing repository..."
             cd /opt/movieweave
             git pull origin main
           else
-            echo "📦 Cloning repository..."
+            echo "Cloning repository..."
             cd /opt
             git clone https://github.com/karlondon/MovieWeave.git movieweave
             cd /opt/movieweave
           fi
           
-          # Create/update .env file with S3 and AWS configuration
-          echo "⚙️ Configuring environment variables..."
-          cat > .env << 'ENVEOF'
-          # Application Settings
-          APP_NAME=MovieWeave
-          DEBUG=false
+          # Ensure config directory exists
+          mkdir -p config
           
-          # Server Configuration
-          PORT=8000
-          HOST=0.0.0.0
+          # Create .env file with S3 and AWS configuration
+          echo "Configuring environment variables..."
+          cat > config/.env << 'ENVEOF'
+APP_NAME=MovieWeave
+DEBUG=false
+PORT=8000
+HOST=0.0.0.0
+AWS_S3_BUCKET=movieweave-storage
+AWS_REGION=us-east-1
+AWS_S3_ENABLED=true
+AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+S3_UPLOAD_DIR=videos/uploads
+S3_OUTPUT_DIR=videos/output
+S3_BACKUP_DIR=backups
+DATABASE_URL=
+TOONFLOW_API_KEY=
+TOONFLOW_API_URL=
+ENVEOF
           
-          # AWS S3 Configuration
-          AWS_S3_BUCKET=movieweave-storage
-          AWS_REGION=us-east-1
-          AWS_S3_ENABLED=true
-          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          
-          # Storage paths
-          S3_UPLOAD_DIR=videos/uploads
-          S3_OUTPUT_DIR=videos/output
-          S3_BACKUP_DIR=backups
-          
-          # Database Configuration (if using)
-          DATABASE_URL=
-          
-          # Toonflow Configuration (if using)
-          TOONFLOW_API_KEY=
-          TOONFLOW_API_URL=
-          ENVEOF
+          echo "Environment file created at config/.env"
           
           # Pull latest Docker images
-          echo "🐳 Pulling Docker images..."
-          docker-compose pull || true
+          echo "Pulling Docker images..."
+          docker-compose pull || echo "Could not pull images"
           
           # Start services
-          echo "🚀 Starting services..."
+          echo "Starting services..."
           docker-compose up -d
           
-          # Wait for services to be ready
-          sleep 10
+          # Wait for services
+          sleep 15
           
-          # Verify services are running
-          echo "✅ Verifying deployment..."
+          # Verify services
+          echo "Verifying deployment..."
           docker-compose ps
           
-          # Test API health
-          curl -f http://localhost:8000/health || echo "⚠️ Health check pending..."
-          EOF
+          # Test API
+          echo "Testing API health..."
+          for i in {1..10}; do
+            if curl -f http://localhost:8000/health 2>/dev/null; then
+              echo "API is healthy!"
+              break
+            fi
+            echo "Attempt $i/10 - waiting..."
+            sleep 3
+          done
+          
+          SSHEOF
 
       - name: Verify deployment
         run: |
-          sleep 15
-          echo "🔍 Testing API endpoint..."
+          sleep 5
+          echo "Testing API endpoint..."
           curl -f http://${{ secrets.LIGHTSAIL_INSTANCE_IP }}:8000/health || exit 1
-          echo ""
-          echo "✅ Deployment successful!"
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "❌ Deployment failed!"
-          exit 1
+          echo "Deployment successful!"
 
       - name: Cleanup SSH key
         if: always()
         run: |
           rm -f ~/.ssh/movieweave.pem
+
