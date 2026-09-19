@@ -80,21 +80,83 @@ jobs:
           chmod 600 ~/.ssh/movieweave.pem
           ssh-keyscan -H ${{ secrets.LIGHTSAIL_INSTANCE_IP }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to Lightsail
+      - name: Setup and Deploy to Lightsail
         run: |
           ssh -i ~/.ssh/movieweave.pem ubuntu@${{ secrets.LIGHTSAIL_INSTANCE_IP }} << 'EOF'
-          cd /opt/movieweave
-          git pull origin main
-          docker-compose pull
+          set -e
+          
+          # Create application directory
+          sudo mkdir -p /opt/movieweave
+          sudo chown ubuntu:ubuntu /opt/movieweave
+          
+          # Clone or pull repository
+          if [ -d /opt/movieweave/.git ]; then
+            echo "📦 Updating existing repository..."
+            cd /opt/movieweave
+            git pull origin main
+          else
+            echo "📦 Cloning repository..."
+            cd /opt
+            git clone https://github.com/karlondon/MovieWeave.git movieweave
+            cd /opt/movieweave
+          fi
+          
+          # Create/update .env file with S3 and AWS configuration
+          echo "⚙️ Configuring environment variables..."
+          cat > .env << 'ENVEOF'
+          # Application Settings
+          APP_NAME=MovieWeave
+          DEBUG=false
+          
+          # Server Configuration
+          PORT=8000
+          HOST=0.0.0.0
+          
+          # AWS S3 Configuration
+          AWS_S3_BUCKET=movieweave-storage
+          AWS_REGION=us-east-1
+          AWS_S3_ENABLED=true
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          
+          # Storage paths
+          S3_UPLOAD_DIR=videos/uploads
+          S3_OUTPUT_DIR=videos/output
+          S3_BACKUP_DIR=backups
+          
+          # Database Configuration (if using)
+          DATABASE_URL=
+          
+          # Toonflow Configuration (if using)
+          TOONFLOW_API_KEY=
+          TOONFLOW_API_URL=
+          ENVEOF
+          
+          # Pull latest Docker images
+          echo "🐳 Pulling Docker images..."
+          docker-compose pull || true
+          
+          # Start services
+          echo "🚀 Starting services..."
           docker-compose up -d
+          
+          # Wait for services to be ready
+          sleep 10
+          
+          # Verify services are running
+          echo "✅ Verifying deployment..."
           docker-compose ps
-          curl http://localhost:8000/health
+          
+          # Test API health
+          curl -f http://localhost:8000/health || echo "⚠️ Health check pending..."
           EOF
 
       - name: Verify deployment
         run: |
-          sleep 10
+          sleep 15
+          echo "🔍 Testing API endpoint..."
           curl -f http://${{ secrets.LIGHTSAIL_INSTANCE_IP }}:8000/health || exit 1
+          echo ""
           echo "✅ Deployment successful!"
 
       - name: Notify on failure
