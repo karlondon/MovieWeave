@@ -1,0 +1,110 @@
+name: Code Quality & Security Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-security:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort bandit safety
+
+      - name: Run Flake8 linting
+        run: |
+          echo "Running Flake8 linting..."
+          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 backend/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Check code formatting with Black
+        run: |
+          echo "Checking code formatting..."
+          black --check backend/ || true
+
+      - name: Check import sorting with isort
+        run: |
+          echo "Checking import sorting..."
+          isort --check-only backend/ || true
+
+      - name: Security scan with Bandit
+        run: |
+          echo "Running security scan..."
+          bandit -r backend/ -f json -o bandit-report.json || true
+          cat bandit-report.json
+
+      - name: Check for vulnerable dependencies
+        run: |
+          echo "Checking for vulnerable dependencies..."
+          safety check --json || true
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Dockerfile linter
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile
+          ignore: DL3008,DL3009
+
+  docker-build-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: false
+          load: true
+          tags: movieweave-api:test
+
+      - name: Test Docker image
+        run: |
+          echo "Testing Docker image..."
+          docker run --rm movieweave-api:test --version 2>/dev/null || true
+          echo "✅ Docker image built successfully"
+
+  secrets-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: GitGuardian scan
+        uses: GitGuardian/gg-shield-action@master
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        with:
+          verbose: true

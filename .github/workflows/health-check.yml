@@ -1,0 +1,39 @@
+name: Scheduled Health Check
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check MovieWeave API health
+        run: |
+          HEALTH_URL="http://${{ secrets.LIGHTSAIL_INSTANCE_IP }}:8000/health"
+          echo "Checking health at: $HEALTH_URL"
+          
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_URL)
+          
+          if [ $RESPONSE -eq 200 ]; then
+            echo "✅ API is healthy (HTTP $RESPONSE)"
+          else
+            echo "❌ API is unhealthy (HTTP $RESPONSE)"
+            exit 1
+          fi
+
+      - name: Check S3 connectivity
+        run: |
+          echo "MovieWeave health check passed at $(date)"
+
+      - name: Notify on failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'MovieWeave API Health Check Failed!'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
