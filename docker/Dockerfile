@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     git \
@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
 
 # Create data directories
-RUN mkdir -p /data/{uploads,output,temp} logs
+RUN mkdir -p /data/uploads /data/output /data/temp logs
 
 # Expose port
 EXPOSE 8000
