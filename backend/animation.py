@@ -368,7 +368,3 @@ def create_animated_video(
         return False
 
 
-        draw.line([cx, body_bottom, cx - 15, body_bottom + leg_length], 
-                 fill=(50, 50, 100), width=2)
-        draw.line([cx, body_bottom, cx + 15, body_bottom + leg_length], 
-                 fill=(50, 50, 100), width=2)
