@@ -152,6 +152,28 @@ def create_frame_ffmpeg(text, frame, character, font_size=20):
     return image
 
 
+def split_text_into_chunks(text, words_per_chunk=15):
+    """Split text into chunks of approximately N words for subtitle display"""
+    if not text or not text.strip():
+        return [""]
+    
+    words = text.split()
+    chunks = []
+    current_chunk = []
+    
+    for word in words:
+        current_chunk.append(word)
+        if len(current_chunk) >= words_per_chunk:
+            chunks.append(' '.join(current_chunk))
+            current_chunk = []
+    
+    # Add remaining words as final chunk
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+    
+    return chunks if chunks else [""]
+
+
 def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_type='male', progress_callback=None):
     """Generate MP4 using FFmpeg - 10x faster than MoviePy"""
     temp_dir = None
