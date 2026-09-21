@@ -7,7 +7,6 @@ from PIL import Image, ImageDraw, ImageFont
 import shutil
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -73,89 +72,84 @@ class StickFigureFFmpeg:
         body_top = cy + head_radius
         body_bottom = body_top + body_length
         draw.line([cx, body_top, cx, body_bottom], fill=(255, 100, 150), width=3)
-        arm_angle = 25 + (frame % 10) * 3 if state == 'talking' else 20
+        arm_angle = 20 + (frame % 12) * 2 if state == 'talking' else 15
         arm_left_x = cx - arm_length * (arm_angle / 90)
         arm_right_x = cx + arm_length * (arm_angle / 90)
-        arm_y = body_top + 15
-        draw.line([cx, arm_y, arm_left_x, arm_y - 10], fill=(220, 190, 160), width=2)
-        draw.line([cx, arm_y, arm_right_x, arm_y - 10], fill=(220, 190, 160), width=2)
-        draw.line([cx - 10, body_bottom, cx - 15, body_bottom + 40], fill=(150, 100, 80), width=2)
-        draw.line([cx + 10, body_bottom, cx + 15, body_bottom + 40], fill=(150, 100, 80), width=2)
+        arm_y = body_top + 18
+        draw.line([cx, arm_y, arm_left_x, arm_y - 12], fill=(220, 190, 160), width=2)
+        draw.line([cx, arm_y, arm_right_x, arm_y - 12], fill=(220, 190, 160), width=2)
+        draw.line([cx, body_bottom, cx - 12, body_bottom + 45], fill=(100, 80, 150), width=2)
+        draw.line([cx, body_bottom, cx + 12, body_bottom + 45], fill=(100, 80, 150), width=2)
     
     def _draw_animal(self, draw, cx, cy, frame, state):
         """Draw animal character"""
-        body_radius = 35
-        draw.ellipse([cx - body_radius, cy - 20, cx + body_radius, cy + 40],
-                    outline=(200, 150, 100), width=3, fill=(255, 200, 100))
-        draw.polygon([cx - 25, cy - 25, cx - 15, cy - 50, cx - 10, cy - 20], fill=(200, 150, 100))
-        draw.polygon([cx + 25, cy - 25, cx + 15, cy - 50, cx + 10, cy - 20], fill=(200, 150, 100))
-        draw.ellipse([cx - 15, cy, cx - 5, cy + 10], fill=(0, 0, 0))
-        draw.ellipse([cx + 5, cy, cx + 15, cy + 10], fill=(0, 0, 0))
-        draw.ellipse([cx - 5, cy + 15, cx + 5, cy + 25], fill=(100, 50, 0))
-        tail_angle = (frame % 20) * 18
-        tail_x = cx + body_radius
-        tail_y = cy + 20
-        tail_end_x = tail_x + 30 * ((tail_angle % 360) / 180 - 1)
-        tail_end_y = tail_y - 30 * abs((tail_angle % 360) / 180 - 0.5)
-        draw.line([tail_x, tail_y, tail_end_x, tail_end_y], fill=(200, 150, 100), width=3)
-        for x_offset in [-20, -5, 5, 20]:
-            leg_x = cx + x_offset
-            leg_y = cy + 40
-            draw.line([leg_x, leg_y, leg_x, leg_y + 25], fill=(150, 100, 50), width=2)
+        head_x, head_y = cx, cy - 20
+        body_x1, body_y1 = cx - 40, cy + 20
+        body_x2, body_y2 = cx + 40, cy + 20
+        draw.ellipse([head_x - 35, head_y - 35, head_x + 35, head_y + 35], 
+                    fill=(200, 120, 60), outline=(150, 80, 20), width=2)
+        draw.ellipse([head_x - 25, head_y - 20, head_x - 5, head_y], fill=(150, 80, 20))
+        draw.ellipse([head_x + 5, head_y - 20, head_x + 25, head_y], fill=(150, 80, 20))
+        draw.ellipse([head_x - 10, head_y - 5, head_x - 2, head_y + 3], fill=(0, 0, 0))
+        draw.ellipse([head_x + 2, head_y - 5, head_x + 10, head_y + 3], fill=(0, 0, 0))
+        draw.rectangle([body_x1, body_y1, body_x2, body_y2], 
+                      fill=(200, 120, 60), outline=(150, 80, 20), width=2)
+        tail_wag = 20 + (frame % 8) * 5 if state == 'talking' else 15
+        draw.line([body_x2, body_y2 - 10, body_x2 + 30, body_y2 - 10 + tail_wag], 
+                 fill=(200, 120, 60), width=4)
 
 
-def split_text_into_chunks(text, words_per_chunk=15):
-    """Split text into display chunks"""
-    words = text.split()
-    chunks = []
-    current_chunk = []
-    for word in words:
-        current_chunk.append(word)
-        if len(current_chunk) >= words_per_chunk:
-            chunks.append(' '.join(current_chunk))
-            current_chunk = []
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
 
-
-def create_frame_ffmpeg(text, frame, character, font_size=20):
-    """Create single frame with character and subtitle"""
-    image = Image.new('RGB', (VIDEO_WIDTH, VIDEO_HEIGHT), BG_COLOR)
-    character.draw(image, frame, 'talking')
-    draw = ImageDraw.Draw(image)
+def create_frame_ffmpeg(text, frame_idx, character):
+    """Create a single frame for video"""
+    frame = Image.new('RGB', (VIDEO_WIDTH, VIDEO_HEIGHT), BG_COLOR)
+    
+    # Draw animated character
+    character.draw(frame, frame_idx, animation_state='talking')
+    
+    # Draw text subtitle at bottom
+    draw = ImageDraw.Draw(frame)
     try:
-        font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', font_size)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
     except:
         font = ImageFont.load_default()
     
+    text_y = VIDEO_HEIGHT - 80
+    text_color = (220, 220, 240)
+    
+    # Word wrap text
     words = text.split()
     lines = []
     current_line = []
+    
     for word in words:
         current_line.append(word)
-        test_line = ' '.join(current_line)
-        bbox = draw.textbbox((0, 0), test_line, font=font)
-        line_width = bbox[2] - bbox[0]
-        if line_width > VIDEO_WIDTH - 100:
+        test_text = ' '.join(current_line)
+        bbox = draw.textbbox((0, 0), test_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        
+        if text_width > VIDEO_WIDTH - 100:
             if len(current_line) > 1:
                 current_line.pop()
                 lines.append(' '.join(current_line))
                 current_line = [word]
             else:
-                lines.append(test_line)
+                lines.append(test_text)
                 current_line = []
+    
     if current_line:
         lines.append(' '.join(current_line))
     
-    subtitle_y = VIDEO_HEIGHT - 120
-    if lines:
-        draw.rectangle([20, subtitle_y - 10, VIDEO_WIDTH - 20, VIDEO_HEIGHT - 20],
-                      fill=(0, 0, 0), outline=(100, 100, 150), width=2)
-        y = subtitle_y
-        for line in lines[:3]:
-            draw.text((40, y), line, fill=(200, 200, 255), font=font)
-            y += 30
-    return image
+    # Draw lines
+    start_y = text_y - (len(lines) - 1) * 35 // 2
+    for i, line in enumerate(lines):
+        y = start_y + i * 35
+        bbox = draw.textbbox((0, 0), line, font=font)
+        line_width = bbox[2] - bbox[0]
+        x = (VIDEO_WIDTH - line_width) // 2
+        draw.text((x, y), line, fill=text_color, font=font)
+    
+    return frame
 
 
 def split_text_into_chunks(text, words_per_chunk=15):
@@ -173,15 +167,53 @@ def split_text_into_chunks(text, words_per_chunk=15):
             chunks.append(' '.join(current_chunk))
             current_chunk = []
     
-    # Add remaining words as final chunk
     if current_chunk:
         chunks.append(' '.join(current_chunk))
     
     return chunks if chunks else [""]
 
 
+def get_audio_duration(audio_path):
+    """Get audio duration in seconds using ffprobe"""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            duration = float(result.stdout.strip())
+            logger.info(f"⏱️ Audio duration: {duration:.1f} seconds")
+            return duration
+        else:
+            logger.error(f"ffprobe failed or no output")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to get audio duration: {e}")
+        return None
+
+
+def generate_frames_batch(batch_start, batch_end, temp_path, text_chunks, 
+                          chunk_duration_frames, character):
+    """Generate a batch of frames (runs in thread pool)"""
+    try:
+        for frame_idx in range(batch_start, batch_end):
+            chunk_idx = min(int(frame_idx / chunk_duration_frames), len(text_chunks) - 1)
+            current_text = text_chunks[chunk_idx]
+            frame = create_frame_ffmpeg(current_text, frame_idx, character)
+            frame_path = temp_path / f"frame_{frame_idx:06d}.png"
+            frame.save(frame_path, 'PNG')
+        return batch_end - batch_start
+    except Exception as e:
+        logger.error(f"Error generating batch frames {batch_start}-{batch_end}: {e}")
+        raise
+
+
+
 async def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_type='male', progress_callback=None):
-    """Generate MP4 using FFmpeg - 10x faster than MoviePy (async version)"""
+    """Generate MP4 using FFmpeg - properly async with thread pool for CPU work"""
     temp_dir = None
     loop = asyncio.get_event_loop()
     
@@ -190,25 +222,17 @@ async def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_t
         if progress_callback:
             progress_callback(5)
         
-        # Get audio duration (run in thread to not block)
-        result = await loop.run_in_executor(
-            None,
-            subprocess.run,
-            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
-             '-of', 'default=noprint_wrappers=1:nokey=1:nokey=1', str(audio_path)],
-            None, None, True
-        )
-        
-        try:
-            duration = float(result.stdout.strip())
-        except (ValueError, AttributeError):
-            logger.error("Could not determine audio duration")
+        # Get audio duration (synchronous call - quick)
+        duration = get_audio_duration(str(audio_path))
+        if duration is None:
+            logger.error("❌ Could not determine audio duration")
             return False
         
         logger.info(f"⏱️ Audio duration: {duration:.1f} seconds")
         if progress_callback:
             progress_callback(10)
         
+        # Prepare for frame generation
         character = StickFigureFFmpeg(character_type)
         text_chunks = split_text_into_chunks(text_content, words_per_chunk=15)
         logger.info(f"📝 Split text into {len(text_chunks)} subtitle chunks")
@@ -219,31 +243,26 @@ async def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_t
         num_frames = int(duration * FPS)
         chunk_duration_frames = num_frames / len(text_chunks) if text_chunks else 1
         
-        logger.info(f"🖼️ Generating {num_frames} frames at {FPS} FPS (async)...")
+        logger.info(f"🖼️ Generating {num_frames} frames at {FPS} FPS (async with thread pool)...")
         
-        # Generate frames in batches, with progress updates
-        batch_size = 50
+        # Generate frames in batches using thread pool
+        batch_size = 100
         for batch_start in range(0, num_frames, batch_size):
             batch_end = min(batch_start + batch_size, num_frames)
             
-            # Run batch frame generation in thread pool to avoid blocking
-            def generate_batch_frames():
-                frames_generated = 0
-                for frame_idx in range(batch_start, batch_end):
-                    chunk_idx = min(int(frame_idx / chunk_duration_frames), len(text_chunks) - 1)
-                    current_text = text_chunks[chunk_idx]
-                    frame = create_frame_ffmpeg(current_text, frame_idx, character)
-                    frame_path = temp_path / f"frame_{frame_idx:06d}.png"
-                    frame.save(frame_path, 'PNG')
-                    frames_generated += 1
-                return frames_generated
+            # Run batch frame generation in thread pool to avoid blocking event loop
+            await loop.run_in_executor(
+                frame_executor,
+                generate_frames_batch,
+                batch_start, batch_end, temp_path, text_chunks,
+                chunk_duration_frames, character
+            )
             
-            await loop.run_in_executor(frame_executor, generate_batch_frames)
-            
-            # Update progress after each batch (allow frontend to see updates)
+            # Update progress after each batch
             if progress_callback:
                 progress = 10 + (batch_end / num_frames) * 35
                 progress_callback(int(progress))
+                logger.info(f"📊 Frame generation progress: {int(progress)}%")
             
             # Yield to event loop to allow other tasks to run
             await asyncio.sleep(0)
@@ -262,22 +281,25 @@ async def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_t
             str(output_path)
         ]
         
-        # Run FFmpeg encoding in thread to not block
+        # Run FFmpeg encoding in thread pool to not block event loop
         result = await loop.run_in_executor(
             None,
             subprocess.run,
-            ffmpeg_cmd, None, None, True
+            ffmpeg_cmd
         )
         
         if result.returncode != 0:
-            logger.error(f"FFmpeg error: {result.stderr}")
+            logger.error(f"❌ FFmpeg encoding failed with code {result.returncode}")
             return False
         
         if progress_callback:
             progress_callback(95)
         
         logger.info(f"✅ Video generation complete: {output_path}")
+        if output_path.exists():
+            logger.info(f"📹 MP4 file size: {output_path.stat().st_size / (1024*1024):.1f} MB")
         return True
+        
     except Exception as e:
         logger.error(f"❌ Video generation failed: {e}", exc_info=True)
         return False
@@ -287,5 +309,4 @@ async def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_t
                 shutil.rmtree(temp_dir)
                 logger.info("🧹 Cleaned up temporary directory")
             except Exception as e:
-                logger.warning(f"Could not cleanup temp: {e}")
-
+                logger.warning(f"⚠️ Could not cleanup temp: {e}")
