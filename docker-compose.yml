@@ -9,11 +9,9 @@ services:
     container_name: movieweave-api
     ports:
       - "8000:8000"
+    env_file:
+      - ./config/.env
     environment:
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION}
-      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
       - TOONFLOW_URL=http://toonflow:10588
       - DATABASE_TYPE=json
       - JOBS_DB_FILE=/data/jobs_db.json
@@ -25,8 +23,6 @@ services:
       - ./data:/data
       - ./logs:/app/logs
       - ./config/.env:/app/.env:ro
-    depends_on:
-      - toonflow
     networks:
       - movieweave-network
     restart: unless-stopped
@@ -37,23 +33,23 @@ services:
       retries: 3
       start_period: 40s
 
-  # Toonflow Animation Engine
-  toonflow:
-    image: node:18-alpine
-    container_name: movieweave-toonflow
-    ports:
-      - "10588:10588"
-    working_dir: /app
-    command: >
-      sh -c "npm install && npm run dev"
-    volumes:
-      - ./toonflow:/app
-    networks:
-      - movieweave-network
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-      - PORT=10588
+  # Toonflow Animation Engine (disabled - implement later)
+  # toonflow:
+  #   image: node:18-alpine
+  #   container_name: movieweave-toonflow
+  #   ports:
+  #     - "10588:10588"
+  #   working_dir: /app
+  #   command: >
+  #     sh -c "npm install && npm run dev"
+  #   volumes:
+  #     - ./toonflow:/app
+  #   networks:
+  #     - movieweave-network
+  #   restart: unless-stopped
+  #   environment:
+  #     - NODE_ENV=production
+  #     - PORT=10588
 
   # Nginx Reverse Proxy
   nginx:
@@ -64,7 +60,7 @@ services:
       - "443:443"
     volumes:
       - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./data:/var/www/movieweave/data:ro
+      - ./frontend/dist:/var/www/movieweave:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - movieweave-api
@@ -79,3 +75,4 @@ networks:
 volumes:
   movieweave_data:
     driver: local
+

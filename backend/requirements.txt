@@ -13,3 +13,7 @@ aiofiles==23.2.1
 requests==2.31.0
 python-docx==0.8.11
 striprtf==0.0.26
+moviepy==1.0.3
+pydub==0.25.1
+pysrt==1.1.2
+pillow==10.0.0
