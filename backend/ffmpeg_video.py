@@ -5,8 +5,14 @@ import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import shutil
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import os
 
 logger = logging.getLogger(__name__)
+
+# Thread pool for CPU-intensive frame generation
+frame_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="frame_gen_")
 
 VIDEO_WIDTH = 1280
 VIDEO_HEIGHT = 720
@@ -174,20 +180,25 @@ def split_text_into_chunks(text, words_per_chunk=15):
     return chunks if chunks else [""]
 
 
-def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_type='male', progress_callback=None):
-    """Generate MP4 using FFmpeg - 10x faster than MoviePy"""
+async def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_type='male', progress_callback=None):
+    """Generate MP4 using FFmpeg - 10x faster than MoviePy (async version)"""
     temp_dir = None
+    loop = asyncio.get_event_loop()
+    
     try:
         logger.info(f"🎬 Starting FFmpeg video generation with {character_type} character")
         if progress_callback:
             progress_callback(5)
         
-        # Get audio duration
-        result = subprocess.run(
+        # Get audio duration (run in thread to not block)
+        result = await loop.run_in_executor(
+            None,
+            subprocess.run,
             ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
              '-of', 'default=noprint_wrappers=1:nokey=1:nokey=1', str(audio_path)],
-            capture_output=True, text=True, timeout=10
+            None, None, True
         )
+        
         try:
             duration = float(result.stdout.strip())
         except (ValueError, AttributeError):
@@ -208,16 +219,34 @@ def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_type='m
         num_frames = int(duration * FPS)
         chunk_duration_frames = num_frames / len(text_chunks) if text_chunks else 1
         
-        logger.info(f"🖼️ Generating {num_frames} frames at {FPS} FPS...")
-        for frame_idx in range(num_frames):
-            chunk_idx = min(int(frame_idx / chunk_duration_frames), len(text_chunks) - 1)
-            current_text = text_chunks[chunk_idx]
-            frame = create_frame_ffmpeg(current_text, frame_idx, character)
-            frame_path = temp_path / f"frame_{frame_idx:06d}.png"
-            frame.save(frame_path, 'PNG')
-            if progress_callback and frame_idx % 50 == 0:
-                progress = 10 + (frame_idx / num_frames) * 35
+        logger.info(f"🖼️ Generating {num_frames} frames at {FPS} FPS (async)...")
+        
+        # Generate frames in batches, with progress updates
+        batch_size = 50
+        for batch_start in range(0, num_frames, batch_size):
+            batch_end = min(batch_start + batch_size, num_frames)
+            
+            # Run batch frame generation in thread pool to avoid blocking
+            def generate_batch_frames():
+                frames_generated = 0
+                for frame_idx in range(batch_start, batch_end):
+                    chunk_idx = min(int(frame_idx / chunk_duration_frames), len(text_chunks) - 1)
+                    current_text = text_chunks[chunk_idx]
+                    frame = create_frame_ffmpeg(current_text, frame_idx, character)
+                    frame_path = temp_path / f"frame_{frame_idx:06d}.png"
+                    frame.save(frame_path, 'PNG')
+                    frames_generated += 1
+                return frames_generated
+            
+            await loop.run_in_executor(frame_executor, generate_batch_frames)
+            
+            # Update progress after each batch (allow frontend to see updates)
+            if progress_callback:
+                progress = 10 + (batch_end / num_frames) * 35
                 progress_callback(int(progress))
+            
+            # Yield to event loop to allow other tasks to run
+            await asyncio.sleep(0)
         
         logger.info(f"✅ Generated {num_frames} frames")
         if progress_callback:
@@ -233,7 +262,13 @@ def generate_mp4_ffmpeg(audio_path, text_content, output_path, character_type='m
             str(output_path)
         ]
         
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=600)
+        # Run FFmpeg encoding in thread to not block
+        result = await loop.run_in_executor(
+            None,
+            subprocess.run,
+            ffmpeg_cmd, None, None, True
+        )
+        
         if result.returncode != 0:
             logger.error(f"FFmpeg error: {result.stderr}")
             return False

@@ -437,7 +437,7 @@ async def process_pdf(job_id: str, file_path: Path):
             chosen_character = random.choice(character_types)
             
             logger.info(f"🎬 Generating MP4 video with {chosen_character} character...")
-            success = generate_mp4_ffmpeg(
+            success = await generate_mp4_ffmpeg(
                 audio_path=audio_file,
                 text_content=text_content,
                 output_path=output_mp4,
