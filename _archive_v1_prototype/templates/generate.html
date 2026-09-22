@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Video - MovieWeave</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 40px; 
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 { 
+            color: #667eea; 
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 2em;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label { 
+            display: block; 
+            font-weight: 600; 
+            margin-bottom: 8px;
+            color: #333;
+        }
+        select, input[type="number"], input[type="file"] { 
+            width: 100%; 
+            padding: 12px; 
+            border: 2px solid #ddd; 
+            border-radius: 8px; 
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        button { 
+            width: 100%; 
+            padding: 14px; 
+            margin-top: 20px;
+            background: #667eea; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        button:hover { background: #764ba2; }
+        button:active { transform: scale(0.98); }
+        .alert {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            display: none;
+        }
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .alert.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        video {
+            max-width: 100%;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .download-btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+        .download-btn:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Generate Cartoon Video</h1>
+        
+        <div id="alert" class="alert"></div>
+        
+        <form id="videoForm">
+            <div class="form-group">
+                <label for="character">Character Selection *</label>
+                <select id="character" name="character" required>
+                    <option value="">Loading characters...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="expression">Expression</label>
+                <select id="expression" name="expression">
+                    <option value="neutral">😐 Neutral</option>
+                    <option value="happy" selected>😊 Happy</option>
+                    <option value="sad">😢 Sad</option>
+                    <option value="angry">😠 Angry</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="duration">Duration (seconds)</label>
+                <input type="number" id="duration" name="duration" value="3" min="0.5" max="60" step="0.5">
+            </div>
+            
+            <div class="form-group">
+                <label for="audio">Audio File (Optional)</label>
+                <input type="file" id="audio" name="audio" accept=".mp3,.wav,.aac">
+            </div>
+            
+            <button type="submit">✨ Generate Video</button>
+        </form>
+        
+        <div id="resultContainer"></div>
+    </div>
+    
+    <script>
+        // Show alert message
+        function showAlert(message, type = 'info') {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = 'alert ' + type;
+            alert.style.display = 'block';
+        }
+        
+        // Hide alert
+        function hideAlert() {
+            document.getElementById('alert').style.display = 'none';
+        }
+        
+        // Load characters on page load
+        async function loadCharacters() {
+            try {
+                console.log('Fetching characters from /api/characters');
+                const response = await fetch('/api/characters');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                
+                const data = await response.json();
+                console.log('Characters received:', data);
+                
+                const select = document.getElementById('character');
+                select.innerHTML = '<option value="">-- Select a character --</option>';
+                
+                if (data.characters && Array.isArray(data.characters)) {
+                    data.characters.forEach(char => {
+                        const option = document.createElement('option');
+                        option.value = char;
+                        option.textContent = char.replace(/_/g, ' ').toUpperCase();
+                        select.appendChild(option);
+                    });
+                    console.log('Successfully loaded ' + data.characters.length + ' characters');
+                    showAlert('Ready! Select a character to generate video.', 'info');
+                } else {
+                    throw new Error('Invalid response format');
+                }
+            } catch (error) {
+                console.error('Error loading characters:', error);
+                showAlert('Error loading characters: ' + error.message, 'error');
+                document.getElementById('character').innerHTML = '<option>Error loading characters</option>';
+            }
+        }
+        
+        // Load characters when page loads
+        document.addEventListener('DOMContentLoaded', loadCharacters);
+        
+        // Handle form submission
+        document.getElementById('videoForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideAlert();
+            
+            const character = document.getElementById('character').value;
+            if (!character) {
+                showAlert('Please select a character', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('character_name', character);
+            formData.append('expression', document.getElementById('expression').value);
+            formData.append('duration', parseFloat(document.getElementById('duration').value));
+            
+            if (document.getElementById('audio').files[0]) {
+                formData.append('audio', document.getElementById('audio').files[0]);
+            }
+            
+            // Show loading
+            const btn = document.querySelector('button[type="submit"]');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Generating video...';
+            
+            document.getElementById('resultContainer').innerHTML = '';
+            showAlert('Generating your video... This usually takes 3-6 seconds', 'info');
+            
+            try {
+                const response = await fetch('/api/video/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✓ Video generated successfully!', 'success');
+                    document.getElementById('resultContainer').innerHTML = `
+                        <video controls style="width: 100%; margin-top: 20px;">
+                            <source src="/api/video/${data.video_file}" type="video/mp4">
+                            Your browser does not support HTML5 video.
+                        </video>
+                        <br>
+                        <a href="/api/video/${data.video_file}" download class="download-btn">📥 Download Video</a>
+                    `;
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        });
+    </script>
+</body>
+</html>
