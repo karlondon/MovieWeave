@@ -45,15 +45,10 @@ class GroqScriptGenerator:
             except Exception as e:
                 logger.warning(f"[Groq Init] Step 3 - Config failed: {e}")
         
-        if not self.api_key:
-            # Last resort: hardcoded fallback (for debugging)
-            logger.warning("[Groq Init] Step 4 - Using hardcoded API key fallback")
-            self.api_key = ""
-        
         logger.info(f"[Groq Init] Final status: api_key={'SET' if self.api_key else 'MISSING'}, len={len(self.api_key) if self.api_key else 0}")
         
         if not self.api_key:
-            raise ScriptGenerationError("GROQ_API_KEY not found anywhere")
+            raise ScriptGenerationError("GROQ_API_KEY not found in environment variables. Please set GROQ_API_KEY in your .env file")
         
         self.model = model
         self.endpoint = "https://api.groq.com/openai/v1/chat/completions"
