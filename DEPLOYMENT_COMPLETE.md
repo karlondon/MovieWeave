@@ -150,22 +150,11 @@ sudo systemctl restart sceneweave.service
 
 ---
 
-## 💰 PRICING TIER
+## ⏸️ PRICING TIER
 
-**Current MVP ($2-5)**
-- 500-1000 character stories
-- 60-90 second videos
-- $0.15-0.30 cost per video
-- 10-30x profit margin
-
-**Future Premium (Coming Soon)**
-- 2000+ character stories
-- 3-5 minute videos
-- Animated characters
-- Multi-voice dialogue
-- Professional effects
+**Coming Friday** - Pricing tiers will be finalized after testing series and identifying any issues. Check back Friday for details.
 
 ---
 
-## ✨ STATUS: PRODUCTION READY
+## ✨ STATUS: PRODUCTION READY - TESTING PHASE
 
