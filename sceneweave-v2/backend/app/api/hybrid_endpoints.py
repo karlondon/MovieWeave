@@ -55,6 +55,7 @@ class EditStoryRequest(BaseModel):
 class CreateBatchRequest(BaseModel):
     """Create batch for processing"""
     batch_name: str
+    story_ids: Optional[List[str]] = None
 
 
 # ============================================================================
@@ -137,6 +138,16 @@ async def edit_story(story_id: str, request: EditStoryRequest):
         if request.tags:
             updates["tags"] = request.tags
         success = workflow_manager.edit_story(story_id, updates)
+        if not success:
+            raise HTTPException(status_code=404, detail="Story not found")
+        return {
+            "success": True,
+            "story_id": story_id,
+            "message": "Story updated successfully"
+        }
+    except Exception as e:
+        logger.error(f"❌ Edit failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
