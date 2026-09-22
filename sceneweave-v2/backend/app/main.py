@@ -14,6 +14,7 @@ from app.config import settings
 from app.utils.logger import setup_logging
 from app.utils.errors import SceneWeaveError
 from app.api import endpoints
+from app.api import hybrid_endpoints
 
 # Setup logging
 logger = setup_logging(settings.LOGS_DIR, app_name="sceneweave")
@@ -101,6 +102,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Include API routes
 app.include_router(endpoints.router)
+app.include_router(hybrid_endpoints.router)
 
 @app.get("/")
 async def root():
