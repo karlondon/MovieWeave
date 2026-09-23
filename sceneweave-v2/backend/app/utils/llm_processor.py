@@ -5,6 +5,7 @@ Supports both Ollama (local) and Groq (cloud API)
 import json
 import logging
 import os
+import re
 from typing import Optional
 import requests
 from datetime import datetime
@@ -15,6 +16,47 @@ logger = logging.getLogger(__name__)
 class ScriptGenerationError(Exception):
     """Error during script generation"""
     pass
+
+def repair_json(json_str: str) -> str:
+    """
+    Attempt to repair common JSON formatting issues from LLM responses
+    """
+    try:
+        # First try parsing as-is
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        pass
+    
+    # Clean up common LLM JSON issues
+    
+    # Remove trailing commas before closing braces/brackets
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+    
+    # Fix unescaped quotes in string values
+    # This is tricky - look for quotes that aren't properly escaped
+    json_str = re.sub(r'(?<!\\)"(?=\w)', r'\\"', json_str)
+    
+    # Fix newlines within JSON strings (common issue)
+    # Replace actual newlines with \n
+    json_str = json_str.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+    
+    # Remove trailing commas in arrays
+    json_str = re.sub(r',(\s*[\]}])', r'\1', json_str)
+    
+    # Fix double commas
+    json_str = re.sub(r',,+', ',', json_str)
+    
+    # Ensure all string values are properly quoted
+    # This is a last-resort fix for common patterns
+    json_str = re.sub(r': (\w+)([,\}])', r': "\1"\2', json_str)
+    
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON repair failed: {str(e)}")
+        logger.error(f"Attempted to repair: {json_str[:300]}...")
+        raise
+
 
 class GroqScriptGenerator:
     """Generate structured screenplay JSON from text using Groq API"""
@@ -192,7 +234,14 @@ Generate the screenplay JSON now:"""
                 raise ScriptGenerationError("No JSON found in response")
             
             json_str = response[json_start:json_end]
-            script = json.loads(json_str)
+            
+            # Try to repair and parse JSON
+            try:
+                script = repair_json(json_str)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error: {str(e)}")
+                logger.error(f"Response preview: {response[:500]}")
+                raise ScriptGenerationError(f"Failed to parse screenplay JSON: {str(e)}")
             
             # Validate structure
             if "scenes" not in script or "characters" not in script:
